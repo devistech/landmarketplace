@@ -27,7 +27,6 @@ const Pricing = () => {
   const [loading, setLoading] = useState<string | null>(null);
   const [scriptLoaded, setScriptLoaded] = useState(false);
 
-  // Load Razorpay script
   useEffect(() => {
     if (document.getElementById("razorpay-script")) {
       setScriptLoaded(true);
@@ -40,7 +39,6 @@ const Pricing = () => {
     document.body.appendChild(script);
   }, []);
 
-  // Fetch current subscription
   useEffect(() => {
     if (!user) return;
     const fetchSub = async () => {
@@ -71,45 +69,52 @@ const Pricing = () => {
     setLoading(planId);
 
     try {
-      // Call edge function to create Razorpay subscription
       const { data, error } = await supabase.functions.invoke("razorpay-subscription", {
-        body: { action: "create_subscription", plan_name: planId },
+        body: { action: "create_order", plan_name: planId },
       });
 
-      if (error || !data?.subscription_id) {
-        console.error("Subscription creation error:", error, data);
-        toast.error(data?.details?.error?.description || "Failed to create subscription");
+      if (error || !data?.order_id) {
+        console.error("Order creation error:", error, data);
+        toast.error("Failed to create order. Please try again.");
         setLoading(null);
         return;
       }
 
-      // Open Razorpay checkout
       const options = {
         key: data.razorpay_key,
-        subscription_id: data.subscription_id,
+        amount: data.amount,
+        currency: data.currency,
         name: "LandMarket",
         description: `${planId === "pro" ? "Pro" : "Business"} Plan - Monthly`,
+        order_id: data.order_id,
         handler: async (response: any) => {
-          // Verify payment via edge function
-          const { error: verifyError } = await supabase.functions.invoke("razorpay-subscription", {
-            body: {
-              action: "verify_payment",
-              subscription_id: response.razorpay_subscription_id,
-              payment_id: response.razorpay_payment_id,
-              plan_name: planId,
-            },
-          });
+          try {
+            const { error: verifyError } = await supabase.functions.invoke("razorpay-subscription", {
+              body: {
+                action: "verify_payment",
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                plan_name: planId,
+              },
+            });
 
-          if (verifyError) {
+            if (verifyError) {
+              toast.error("Payment verification failed");
+            } else {
+              toast.success(`Successfully subscribed to ${planId === "pro" ? "Pro" : "Business"} plan!`);
+              setCurrentPlan(planId);
+            }
+          } catch {
             toast.error("Payment verification failed");
-          } else {
-            toast.success(`Successfully subscribed to ${planId === "pro" ? "Pro" : "Business"} plan!`);
-            setCurrentPlan(planId);
           }
           setLoading(null);
         },
         modal: {
           ondismiss: () => setLoading(null),
+        },
+        prefill: {
+          email: user.email,
         },
         theme: { color: "#4a7c59" },
       };
@@ -127,38 +132,22 @@ const Pricing = () => {
     if (!user) {
       return (
         <Link to="/signup">
-          <Button className="w-full" variant={plan.popular ? "default" : "outline"}>
-            Get Started
-          </Button>
+          <Button className="w-full" variant={plan.popular ? "default" : "outline"}>Get Started</Button>
         </Link>
       );
     }
-
     if (plan.id === currentPlan) {
       return <Button variant="outline" className="w-full" disabled>Current Plan</Button>;
     }
-
     if (plan.id === "free") {
       return <Button variant="outline" className="w-full" disabled>Free Plan</Button>;
     }
-
-    // Don't allow downgrade from business to pro
     if (currentPlan === "business" && plan.id === "pro") {
       return <Button variant="outline" className="w-full" disabled>Included</Button>;
     }
-
     return (
-      <Button
-        className="w-full"
-        variant={plan.popular ? "default" : "outline"}
-        onClick={() => handleSubscribe(plan.id)}
-        disabled={loading !== null}
-      >
-        {loading === plan.id ? (
-          <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing...</>
-        ) : (
-          `Upgrade to ${plan.name}`
-        )}
+      <Button className="w-full" variant={plan.popular ? "default" : "outline"} onClick={() => handleSubscribe(plan.id)} disabled={loading !== null}>
+        {loading === plan.id ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing...</> : `Upgrade to ${plan.name}`}
       </Button>
     );
   };
@@ -168,7 +157,7 @@ const Pricing = () => {
       <div className="container mx-auto px-4 py-16">
         <div className="mb-12 text-center">
           <h1 className="mb-4 font-serif text-4xl font-bold">Choose Your Plan</h1>
-          <p className="text-lg text-muted-foreground">Start free and scale as you grow. Plans auto-renew monthly.</p>
+          <p className="text-lg text-muted-foreground">Start free and scale as you grow.</p>
         </div>
         <div className="mx-auto grid max-w-4xl gap-8 md:grid-cols-3">
           {plans.map((plan) => (

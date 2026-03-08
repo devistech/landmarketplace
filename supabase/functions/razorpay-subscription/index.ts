@@ -36,35 +36,33 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { action, plan_name, subscription_id, payment_id } = await req.json();
+    const { action, plan_name, razorpay_order_id, razorpay_payment_id, razorpay_signature } = await req.json();
 
-    if (action === "create_subscription") {
-      // Create a Razorpay subscription
-      const planMap: Record<string, { plan_id: string; amount: number }> = {
-        pro: { plan_id: "eIr7uhuZ9w3lCtH2Fvbm35T1", amount: 19900 },
-        business: { plan_id: "eIr7uhuZ9w3lCtH2Fvbm35T1", amount: 49900 },
+    if (action === "create_order") {
+      const planPrices: Record<string, number> = {
+        pro: 19900,      // ₹199 in paise
+        business: 49900,  // ₹499 in paise
       };
 
-      const plan = planMap[plan_name];
-      if (!plan) {
+      const amount = planPrices[plan_name];
+      if (!amount) {
         return new Response(JSON.stringify({ error: "Invalid plan" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Create a Razorpay subscription via API
       const auth = btoa(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`);
-      const rzRes = await fetch("https://api.razorpay.com/v1/subscriptions", {
+      const rzRes = await fetch("https://api.razorpay.com/v1/orders", {
         method: "POST",
         headers: {
           Authorization: `Basic ${auth}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          plan_id: plan.plan_id,
-          total_count: 12,
-          quantity: 1,
+          amount,
+          currency: "INR",
+          receipt: `${plan_name}_${user.id.substring(0, 8)}_${Date.now()}`,
           notes: {
             user_id: user.id,
             plan_name,
@@ -76,14 +74,16 @@ Deno.serve(async (req) => {
 
       if (!rzRes.ok) {
         console.error("Razorpay error:", rzData);
-        return new Response(JSON.stringify({ error: "Failed to create subscription", details: rzData }), {
+        return new Response(JSON.stringify({ error: "Failed to create order", details: rzData }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       return new Response(JSON.stringify({
-        subscription_id: rzData.id,
+        order_id: rzData.id,
+        amount: rzData.amount,
+        currency: rzData.currency,
         razorpay_key: RAZORPAY_KEY_ID,
         plan_name,
       }), {
@@ -92,23 +92,30 @@ Deno.serve(async (req) => {
     }
 
     if (action === "verify_payment") {
-      // After successful payment, update the subscription in DB
-      if (!subscription_id || !payment_id || !plan_name) {
+      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !plan_name) {
         return new Response(JSON.stringify({ error: "Missing fields" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Verify subscription status with Razorpay
-      const auth = btoa(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`);
-      const verifyRes = await fetch(`https://api.razorpay.com/v1/subscriptions/${subscription_id}`, {
-        headers: { Authorization: `Basic ${auth}` },
-      });
-      const verifyData = await verifyRes.json();
+      // Verify signature using HMAC SHA256
+      const encoder = new TextEncoder();
+      const key = await crypto.subtle.importKey(
+        "raw",
+        encoder.encode(RAZORPAY_KEY_SECRET),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign"]
+      );
+      const signatureData = `${razorpay_order_id}|${razorpay_payment_id}`;
+      const signatureBuffer = await crypto.subtle.sign("HMAC", key, encoder.encode(signatureData));
+      const expectedSignature = Array.from(new Uint8Array(signatureBuffer))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
 
-      if (verifyData.status !== "active" && verifyData.status !== "authenticated") {
-        return new Response(JSON.stringify({ error: "Subscription not active" }), {
+      if (expectedSignature !== razorpay_signature) {
+        return new Response(JSON.stringify({ error: "Invalid payment signature" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -118,7 +125,6 @@ Deno.serve(async (req) => {
       const expiryDate = new Date();
       expiryDate.setMonth(expiryDate.getMonth() + 1);
 
-      // Check if user already has a subscription
       const { data: existing } = await supabase
         .from("subscriptions")
         .select("id")
@@ -130,7 +136,7 @@ Deno.serve(async (req) => {
           .from("subscriptions")
           .update({
             plan_name,
-            payment_id,
+            payment_id: razorpay_payment_id,
             start_date: new Date().toISOString(),
             expiry_date: expiryDate.toISOString(),
           })
@@ -139,7 +145,7 @@ Deno.serve(async (req) => {
         await supabase.from("subscriptions").insert({
           user_id: user.id,
           plan_name,
-          payment_id,
+          payment_id: razorpay_payment_id,
           start_date: new Date().toISOString(),
           expiry_date: expiryDate.toISOString(),
         });
