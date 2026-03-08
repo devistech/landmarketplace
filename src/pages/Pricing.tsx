@@ -2,9 +2,18 @@ import Layout from "@/components/layout/Layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle } from "lucide-react";
+import { CheckCircle, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
 
 const plans = [
   { id: "free", name: "Free", price: "₹0", period: "", listings: 1, features: ["1 active listing", "Basic visibility", "Contact buttons"] },
@@ -13,14 +22,153 @@ const plans = [
 ];
 
 const Pricing = () => {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
+  const [currentPlan, setCurrentPlan] = useState<string>("free");
+  const [loading, setLoading] = useState<string | null>(null);
+  const [scriptLoaded, setScriptLoaded] = useState(false);
+
+  // Load Razorpay script
+  useEffect(() => {
+    if (document.getElementById("razorpay-script")) {
+      setScriptLoaded(true);
+      return;
+    }
+    const script = document.createElement("script");
+    script.id = "razorpay-script";
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => setScriptLoaded(true);
+    document.body.appendChild(script);
+  }, []);
+
+  // Fetch current subscription
+  useEffect(() => {
+    if (!user) return;
+    const fetchSub = async () => {
+      const { data } = await supabase
+        .from("subscriptions")
+        .select("plan_name, expiry_date")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (data && data.expiry_date && new Date(data.expiry_date) > new Date()) {
+        setCurrentPlan(data.plan_name);
+      } else {
+        setCurrentPlan("free");
+      }
+    };
+    fetchSub();
+  }, [user]);
+
+  const handleSubscribe = async (planId: string) => {
+    if (!user || !session) {
+      toast.error("Please log in first");
+      return;
+    }
+    if (!scriptLoaded) {
+      toast.error("Payment system is loading, please wait...");
+      return;
+    }
+
+    setLoading(planId);
+
+    try {
+      // Call edge function to create Razorpay subscription
+      const { data, error } = await supabase.functions.invoke("razorpay-subscription", {
+        body: { action: "create_subscription", plan_name: planId },
+      });
+
+      if (error || !data?.subscription_id) {
+        console.error("Subscription creation error:", error, data);
+        toast.error(data?.details?.error?.description || "Failed to create subscription");
+        setLoading(null);
+        return;
+      }
+
+      // Open Razorpay checkout
+      const options = {
+        key: data.razorpay_key,
+        subscription_id: data.subscription_id,
+        name: "LandMarket",
+        description: `${planId === "pro" ? "Pro" : "Business"} Plan - Monthly`,
+        handler: async (response: any) => {
+          // Verify payment via edge function
+          const { error: verifyError } = await supabase.functions.invoke("razorpay-subscription", {
+            body: {
+              action: "verify_payment",
+              subscription_id: response.razorpay_subscription_id,
+              payment_id: response.razorpay_payment_id,
+              plan_name: planId,
+            },
+          });
+
+          if (verifyError) {
+            toast.error("Payment verification failed");
+          } else {
+            toast.success(`Successfully subscribed to ${planId === "pro" ? "Pro" : "Business"} plan!`);
+            setCurrentPlan(planId);
+          }
+          setLoading(null);
+        },
+        modal: {
+          ondismiss: () => setLoading(null),
+        },
+        theme: { color: "#4a7c59" },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (err) {
+      console.error(err);
+      toast.error("Something went wrong");
+      setLoading(null);
+    }
+  };
+
+  const getPlanButton = (plan: typeof plans[0]) => {
+    if (!user) {
+      return (
+        <Link to="/signup">
+          <Button className="w-full" variant={plan.popular ? "default" : "outline"}>
+            Get Started
+          </Button>
+        </Link>
+      );
+    }
+
+    if (plan.id === currentPlan) {
+      return <Button variant="outline" className="w-full" disabled>Current Plan</Button>;
+    }
+
+    if (plan.id === "free") {
+      return <Button variant="outline" className="w-full" disabled>Free Plan</Button>;
+    }
+
+    // Don't allow downgrade from business to pro
+    if (currentPlan === "business" && plan.id === "pro") {
+      return <Button variant="outline" className="w-full" disabled>Included</Button>;
+    }
+
+    return (
+      <Button
+        className="w-full"
+        variant={plan.popular ? "default" : "outline"}
+        onClick={() => handleSubscribe(plan.id)}
+        disabled={loading !== null}
+      >
+        {loading === plan.id ? (
+          <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing...</>
+        ) : (
+          `Upgrade to ${plan.name}`
+        )}
+      </Button>
+    );
+  };
 
   return (
     <Layout>
       <div className="container mx-auto px-4 py-16">
         <div className="mb-12 text-center">
           <h1 className="mb-4 font-serif text-4xl font-bold">Choose Your Plan</h1>
-          <p className="text-lg text-muted-foreground">Start free and scale as you grow.</p>
+          <p className="text-lg text-muted-foreground">Start free and scale as you grow. Plans auto-renew monthly.</p>
         </div>
         <div className="mx-auto grid max-w-4xl gap-8 md:grid-cols-3">
           {plans.map((plan) => (
@@ -40,21 +188,7 @@ const Pricing = () => {
                     </li>
                   ))}
                 </ul>
-                {user ? (
-                  plan.id === "free" ? (
-                    <Button variant="outline" className="w-full" disabled>Current Plan</Button>
-                  ) : (
-                    <Button className="w-full" variant={plan.popular ? "default" : "outline"}>
-                      Upgrade to {plan.name}
-                    </Button>
-                  )
-                ) : (
-                  <Link to="/signup">
-                    <Button className="w-full" variant={plan.popular ? "default" : "outline"}>
-                      Get Started
-                    </Button>
-                  </Link>
-                )}
+                {getPlanButton(plan)}
               </CardContent>
             </Card>
           ))}
