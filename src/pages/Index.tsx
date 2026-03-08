@@ -8,6 +8,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { MapPin, Search, Upload, Users, CheckCircle, ArrowRight, Tractor, Building2, Factory, Home } from "lucide-react";
+import { Suspense, lazy } from "react";
+
+const HeroBackground3D = lazy(() => import("@/components/HeroBackground3D"));
 
 const landTypes = [
   { icon: Tractor, label: "Agricultural", type: "agriculture" },
