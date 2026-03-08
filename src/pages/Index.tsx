@@ -8,6 +8,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { MapPin, Search, Upload, Users, CheckCircle, ArrowRight, Tractor, Building2, Factory, Home } from "lucide-react";
+import { Suspense, lazy } from "react";
+
+const HeroBackground3D = lazy(() => import("@/components/HeroBackground3D"));
 
 const landTypes = [
   { icon: Tractor, label: "Agricultural", type: "agriculture" },
@@ -46,7 +49,10 @@ const Index = () => {
     <Layout>
       {/* Hero */}
       <section className="relative overflow-hidden bg-gradient-to-br from-primary/10 via-background to-accent/10 py-20 lg:py-32">
-        <div className="container mx-auto px-4 text-center">
+        <Suspense fallback={null}>
+          <HeroBackground3D />
+        </Suspense>
+        <div className="container relative z-10 mx-auto px-4 text-center">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
             <Badge variant="secondary" className="mb-4 text-sm">🌍 Global Land Marketplace</Badge>
             <h1 className="mx-auto mb-6 max-w-4xl font-serif text-4xl font-bold leading-tight md:text-6xl lg:text-7xl">
