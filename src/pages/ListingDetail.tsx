@@ -16,6 +16,21 @@ import type { Database } from "@/integrations/supabase/types";
 
 type ReportReason = Database["public"]["Enums"]["report_reason"];
 
+const isSafeGoogleMapsUrl = (url: string | null | undefined): string | null => {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:") return null;
+    const allowed = ["maps.google.com", "www.google.com", "google.com", "maps.app.goo.gl", "goo.gl"];
+    const host = u.hostname.toLowerCase();
+    if (!allowed.includes(host)) return null;
+    if ((host === "www.google.com" || host === "google.com") && !u.pathname.startsWith("/maps")) return null;
+    return u.toString();
+  } catch {
+    return null;
+  }
+};
+
 const landTypeLabels: Record<string, string> = {
   agriculture: "Agriculture",
   residential_plot: "Residential Plot",
@@ -157,13 +172,16 @@ const ListingDetail = () => {
                   </Button>
                 </a>
               )}
-              {listing.google_maps_link && (
-                <a href={listing.google_maps_link} target="_blank" rel="noopener noreferrer">
-                  <Button className="w-full gap-2" size="lg" variant="outline">
-                    <MapPin className="h-5 w-5" /> View on Google Maps
-                  </Button>
-                </a>
-              )}
+              {(() => {
+                const safeMaps = isSafeGoogleMapsUrl(listing.google_maps_link);
+                return safeMaps ? (
+                  <a href={safeMaps} target="_blank" rel="noopener noreferrer">
+                    <Button className="w-full gap-2" size="lg" variant="outline">
+                      <MapPin className="h-5 w-5" /> View on Google Maps
+                    </Button>
+                  </a>
+                ) : null;
+              })()}
             </div>
 
             {/* Report */}

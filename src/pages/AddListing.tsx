@@ -29,8 +29,15 @@ const AddListing = () => {
 
   const update = (key: string, val: string) => setForm((p) => ({ ...p, [key]: val }));
 
+  const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
   const handleImageAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
+    const invalid = files.find((f) => !ALLOWED_IMAGE_TYPES.includes(f.type));
+    if (invalid) {
+      toast.error("Only JPEG, PNG, WebP, or GIF images are allowed");
+      return;
+    }
     if (images.length + files.length > 3) {
       toast.error("Maximum 3 images allowed");
       return;
@@ -46,6 +53,27 @@ const AddListing = () => {
     if (images.length === 0) {
       toast.error("Please add at least 1 image");
       return;
+    }
+
+    // Validate Google Maps link if provided
+    const mapsLink = form.google_maps_link.trim();
+    if (mapsLink) {
+      try {
+        const u = new URL(mapsLink);
+        const allowed = ["maps.google.com", "www.google.com", "google.com", "maps.app.goo.gl", "goo.gl"];
+        const host = u.hostname.toLowerCase();
+        const ok =
+          u.protocol === "https:" &&
+          allowed.includes(host) &&
+          (!(host === "www.google.com" || host === "google.com") || u.pathname.startsWith("/maps"));
+        if (!ok) {
+          toast.error("Google Maps link must be a valid Google Maps URL");
+          return;
+        }
+      } catch {
+        toast.error("Google Maps link is not a valid URL");
+        return;
+      }
     }
 
     setLoading(true);
@@ -191,7 +219,7 @@ const AddListing = () => {
                     <label className="flex h-24 w-24 cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed text-muted-foreground hover:border-primary hover:text-primary">
                       <Upload className="h-5 w-5" />
                       <span className="mt-1 text-xs">Add</span>
-                      <input type="file" accept="image/*" onChange={handleImageAdd} className="hidden" />
+                      <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={handleImageAdd} className="hidden" />
                     </label>
                   )}
                 </div>
