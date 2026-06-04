@@ -55,6 +55,27 @@ const AddListing = () => {
       return;
     }
 
+    // Validate Google Maps link if provided
+    const mapsLink = form.google_maps_link.trim();
+    if (mapsLink) {
+      try {
+        const u = new URL(mapsLink);
+        const allowed = ["maps.google.com", "www.google.com", "google.com", "maps.app.goo.gl", "goo.gl"];
+        const host = u.hostname.toLowerCase();
+        const ok =
+          u.protocol === "https:" &&
+          allowed.includes(host) &&
+          (!(host === "www.google.com" || host === "google.com") || u.pathname.startsWith("/maps"));
+        if (!ok) {
+          toast.error("Google Maps link must be a valid Google Maps URL");
+          return;
+        }
+      } catch {
+        toast.error("Google Maps link is not a valid URL");
+        return;
+      }
+    }
+
     setLoading(true);
 
     // Check listing limit
