@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "verify_payment") {
-      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !plan_name) {
+      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
         return new Response(JSON.stringify({ error: "Missing fields" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -121,6 +121,37 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
+      // Fetch the order from Razorpay to derive plan_name from server-set notes.
+      // NEVER trust client-supplied plan_name.
+      const orderAuth = btoa(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`);
+      const orderRes = await fetch(`https://api.razorpay.com/v1/orders/${razorpay_order_id}`, {
+        headers: { Authorization: `Basic ${orderAuth}` },
+      });
+      const orderData = await orderRes.json();
+      if (!orderRes.ok) {
+        console.error("Razorpay order fetch failed:", orderData);
+        return new Response(JSON.stringify({ error: "Order verification failed" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const verifiedPlanName = orderData?.notes?.plan_name;
+      const verifiedUserId = orderData?.notes?.user_id;
+      if (!verifiedPlanName || !["pro", "business"].includes(verifiedPlanName)) {
+        return new Response(JSON.stringify({ error: "Invalid plan on order" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (verifiedUserId !== user.id) {
+        return new Response(JSON.stringify({ error: "Order does not belong to this user" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const plan_name_verified = verifiedPlanName;
 
       // Upsert subscription in DB
       const expiryDate = new Date();
