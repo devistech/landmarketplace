@@ -219,7 +219,7 @@ const AddListing = () => {
                     <label className="flex h-24 w-24 cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed text-muted-foreground hover:border-primary hover:text-primary">
                       <Upload className="h-5 w-5" />
                       <span className="mt-1 text-xs">Add</span>
-                      <input type="file" accept="image/*" onChange={handleImageAdd} className="hidden" />
+                      <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={handleImageAdd} className="hidden" />
                     </label>
                   )}
                 </div>
