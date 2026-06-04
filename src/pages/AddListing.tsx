@@ -29,8 +29,15 @@ const AddListing = () => {
 
   const update = (key: string, val: string) => setForm((p) => ({ ...p, [key]: val }));
 
+  const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
   const handleImageAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
+    const invalid = files.find((f) => !ALLOWED_IMAGE_TYPES.includes(f.type));
+    if (invalid) {
+      toast.error("Only JPEG, PNG, WebP, or GIF images are allowed");
+      return;
+    }
     if (images.length + files.length > 3) {
       toast.error("Maximum 3 images allowed");
       return;
