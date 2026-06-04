@@ -172,13 +172,16 @@ const ListingDetail = () => {
                   </Button>
                 </a>
               )}
-              {listing.google_maps_link && (
-                <a href={listing.google_maps_link} target="_blank" rel="noopener noreferrer">
-                  <Button className="w-full gap-2" size="lg" variant="outline">
-                    <MapPin className="h-5 w-5" /> View on Google Maps
-                  </Button>
-                </a>
-              )}
+              {(() => {
+                const safeMaps = isSafeGoogleMapsUrl(listing.google_maps_link);
+                return safeMaps ? (
+                  <a href={safeMaps} target="_blank" rel="noopener noreferrer">
+                    <Button className="w-full gap-2" size="lg" variant="outline">
+                      <MapPin className="h-5 w-5" /> View on Google Maps
+                    </Button>
+                  </a>
+                ) : null;
+              })()}
             </div>
 
             {/* Report */}
