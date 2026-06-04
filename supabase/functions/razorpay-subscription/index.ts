@@ -6,7 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const RAZORPAY_KEY_ID = "rzp_test_SOnqOd6iw5TRVd";
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -14,6 +14,7 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const RAZORPAY_KEY_ID = Deno.env.get("RAZORPAY_KEY_ID")!;
     const RAZORPAY_KEY_SECRET = Deno.env.get("RAZORPAY_KEY_SECRET")!;
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
