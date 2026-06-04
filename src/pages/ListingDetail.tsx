@@ -16,6 +16,21 @@ import type { Database } from "@/integrations/supabase/types";
 
 type ReportReason = Database["public"]["Enums"]["report_reason"];
 
+const isSafeGoogleMapsUrl = (url: string | null | undefined): string | null => {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:") return null;
+    const allowed = ["maps.google.com", "www.google.com", "google.com", "maps.app.goo.gl", "goo.gl"];
+    const host = u.hostname.toLowerCase();
+    if (!allowed.includes(host)) return null;
+    if ((host === "www.google.com" || host === "google.com") && !u.pathname.startsWith("/maps")) return null;
+    return u.toString();
+  } catch {
+    return null;
+  }
+};
+
 const landTypeLabels: Record<string, string> = {
   agriculture: "Agriculture",
   residential_plot: "Residential Plot",
