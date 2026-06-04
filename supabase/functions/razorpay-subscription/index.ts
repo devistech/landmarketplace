@@ -167,7 +167,7 @@ Deno.serve(async (req) => {
         await supabase
           .from("subscriptions")
           .update({
-            plan_name,
+            plan_name: plan_name_verified,
             payment_id: razorpay_payment_id,
             start_date: new Date().toISOString(),
             expiry_date: expiryDate.toISOString(),
@@ -176,7 +176,7 @@ Deno.serve(async (req) => {
       } else {
         await supabase.from("subscriptions").insert({
           user_id: user.id,
-          plan_name,
+          plan_name: plan_name_verified,
           payment_id: razorpay_payment_id,
           start_date: new Date().toISOString(),
           expiry_date: expiryDate.toISOString(),
